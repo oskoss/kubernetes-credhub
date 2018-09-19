@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -9,6 +10,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"code.cloudfoundry.org/credhub-cli/credhub/credentials"
@@ -50,96 +53,119 @@ func main() {
 		v1.POST("/receivecreds", receiveCreds)
 		v1.GET("/health", healthEndpoint)
 	}
-	router.Run(listenPort)
+
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: router,
+	}
+
+	go func() {
+		// service connections
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	// Wait for interrupt signal to gracefully shutdown the server with
+	// a timeout of 5 seconds.
+	quit := make(chan os.Signal)
+	signal.Notify(quit, os.Interrupt)
+	<-quit
+	log.Println("Shutdown Server ...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatal("Server Shutdown:", err)
+	}
+	log.Println("Server exiting")
 }
 
 func receiveCreds(c *gin.Context) {
-	var json InitContainerPackage
-	if err := c.ShouldBindJSON(&json); err != nil {
+	var initJSON InitContainerPackage
+	if err := c.ShouldBindJSON(&initJSON); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	log.Printf("%+v was uploaded!\n", json)
-	c.JSON(200, "Success!")
-	shutdown()
+	log.Printf("Received kubernetes-credhub-controller payload successfully!\n")
+	c.JSON(200, gin.H{
+		"status": "success",
+	})
+
+	_, err := getPodCreds(initJSON)
+	if err != nil {
+		log.Fatal("Server Shutdown:", err)
+		c.JSON(500, gin.H{
+			"status": "failed",
+		})
+	}
+	//Need to kill ourselves since we are disposable init container
+	syscall.Kill(syscall.Getpid(), syscall.SIGINT)
 }
 
-func shutdown() {
-	time.Sleep(time.Millisecond * 500)
-	os.Exit(0)
-}
-
-// Gets certs, as files, connects to credhub, gets all accessable creds and store in file
-func receiveKeys(c *gin.Context) {
-
-	// TODO: Check if cert_files exist.
-	form, err := c.MultipartForm()
+func getPodCreds(initJSON InitContainerPackage) ([]credentials.Credential, error) {
+	client, err := setupCredhubClient(initJSON.Certificate)
 	if err != nil {
-		c.String(http.StatusBadRequest, fmt.Sprintf("Uploading File Error: %s", err.Error()))
-		return
+		return []credentials.Credential{}, err
 	}
-
-	files := form.File["upload[]"]
-	for _, file := range files {
-
-		if file.Filename != clientKeyFileName && file.Filename != clientCertFileName && file.Filename != caCertFileName && file.Filename != credhubInfoFileName {
-			log.Printf("%s was uploaded, but it's not allowed\n", file.Filename)
-			c.String(http.StatusBadRequest, fmt.Sprintf("%s was received, but only %s, %s, %s allowed", file.Filename, clientKeyFileName, clientCertFileName, caCertFileName))
-			return
-		}
-		fmt.Printf("%s is saved\n", file.Filename)
-		c.SaveUploadedFile(file, file.Filename)
-	}
-
-	c.String(http.StatusOK, fmt.Sprintf("%d files uploaded!\n", len(files)))
-
-	credhubFile, err := os.Open(credhubInfoFileName)
-	if err != nil {
-		c.String(http.StatusBadRequest, fmt.Sprintf("Error Opening CredHub Info File, %s", err.Error()))
-		return
-	}
-	var clusterCredhub CredhubInfo
-	jsonParser := json.NewDecoder(credhubFile)
-	err = jsonParser.Decode(&clusterCredhub)
-	if err != nil {
-		c.String(http.StatusBadRequest, fmt.Sprintf("Error Parsing CredHub Info File, %s", err.Error()))
-		return
-	}
-
-	// Connect to credhub
-	client := credhubClient()
-	// Find all credentials, using root /
 
 	request := "/api/v1/data?name-like=/"
-	bodyBytes, err := credhubGet(request, clusterCredhub.CredhubURL, client)
-
-	c.String(http.StatusOK, fmt.Sprintf("Credhub responce is %s\n", string(bodyBytes)))
+	bodyBytes, err := credhubGet(request, initJSON.CredhubURL, client)
+	if err != nil {
+		log.Printf("Issue getting creds from credhub! Error: %v\n", err)
+		return []credentials.Credential{}, err
+	}
 
 	var cred CredhubResponse
-
 	err = json.Unmarshal(bodyBytes, &cred)
 	if err != nil {
 		log.Printf("Credhub response json un-marshalling error: %v\n", err)
-		return
+		return []credentials.Credential{}, err
 	}
 
-	for _, credential := range cred.Credentials {
+	log.Printf("GOT CREDS FROM CREDHUB!!!!!!!!!!!! %+v", cred)
+	return []credentials.Credential{}, nil
+	// for _, credential := range cred.Credentials {
 
-		// Get creds by name
-		request := "/api/v1/data?name=" + credential.Name
-		bodyBytes, err := credhubGet(request, clusterCredhub.CredhubURL, client)
-		if err != nil {
-			c.String(http.StatusBadRequest, fmt.Sprintf("Request: %s unsuccessful. %v\n", request, err))
-			continue
-		}
-		c.String(http.StatusOK, fmt.Sprintf("Credhub responce is %s\n", string(bodyBytes)))
+	// 	// Get creds by name
+	// 	request = "/api/v1/data?name=" + credential.Name
+	// 	bodyBytes, err := credhubGet(request, initJSON.CredhubURL, client)
+	// 	if err != nil {
+	// 		log.Printf("Issue getting creds json un-marshalling error: %v\n", err)
+	// 		return []credentials.Credential{}, err
+	// 	}
 
-		storeCreds(credential.Name, string(bodyBytes))
-		c.String(http.StatusOK, fmt.Sprintf("Cred %s stored at %s\n", credential.Name, volumePath))
+	// 	storeCreds(credential.Name, string(bodyBytes))
+	// 	c.String(http.StatusOK, fmt.Sprintf("Cred %s stored at %s\n", credential.Name, volumePath))
 
-		fmt.Printf("name: %v, value: %v \n", credential.Name, string(bodyBytes))
+	// 	fmt.Printf("name: %v, value: %v \n", credential.Name, string(bodyBytes))
+	// }
+
+}
+
+func setupCredhubClient(creds credentials.Certificate) (*http.Client, error) {
+	log.Printf("YUP SECERTKSJDKLSLK: %+v", creds.Value)
+	// Connect to credhub, using received certs
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM([]byte(creds.Value.Ca))
+	log.Printf("CA cert pool created\n")
+
+	cert, err := tls.X509KeyPair([]byte(creds.Value.Certificate), []byte(creds.Value.PrivateKey))
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("Cert pair created\n")
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs:      caCertPool,
+				Certificates: []tls.Certificate{cert},
+			},
+		},
 	}
 
+	return client, nil
 }
 
 // Health will return alive message with HTTP 200 code
@@ -154,44 +180,13 @@ func healthEndpoint(c *gin.Context) {
 // Utility functions
 // func upload_files
 
-// Connect to credhub API using certs. Return http client
-func credhubClient() *http.Client {
-
-	// Connect to credhub, using recieved certs
-	caCert, err := ioutil.ReadFile(caCertFileName)
-	log.Printf("%v CA cert processed\n", caCertFileName)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM(caCert)
-	log.Printf("CA cert pool created\n")
-
-	cert, err := tls.LoadX509KeyPair(clientCertFileName, clientKeyFileName)
-	log.Printf("Cert pair created\n")
-	if err != nil {
-		log.Fatal(err)
-	}
-	client := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				RootCAs:      caCertPool,
-				Certificates: []tls.Certificate{cert},
-			},
-		},
-	}
-
-	return client
-}
-
 // Sent get request to credhub API and return response body.
 func credhubGet(request string, credhubURL string, client *http.Client) ([]byte, error) {
 
 	resp, err := client.Get("https://" + credhubURL + request)
 	if err != nil {
 		log.Printf("Credhub API connection err: %s\n", err.Error())
-		return nil, err
+		return []byte{}, err
 	}
 	log.Printf("Credhub GET request %s executed\n", request)
 
@@ -199,13 +194,14 @@ func credhubGet(request string, credhubURL string, client *http.Client) ([]byte,
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("Read body err: %s\n", err.Error())
+		return []byte{}, err
 	}
 
 	bodyString := string(bodyBytes)
 	if resp.StatusCode != 200 {
-		//log.Printf("Credhub can't process request. Response is %v\n", bodyString)
+		log.Printf("Credhub can't process request. Response is %v\n", bodyString)
 		err := fmt.Errorf("Credhub can't process request. Response is %v", bodyString)
-		return nil, err
+		return []byte{}, err
 	}
 	log.Printf("Credentials found in credhub: %s \n", bodyString)
 
@@ -220,5 +216,3 @@ func storeCreds(credName string, credValue string) {
 		return
 	}
 }
-
-// Helpers

@@ -42,6 +42,7 @@ func (t *TestHandler) ObjectCreated(obj interface{}) {
 
 	pod := obj.(*core_v1.Pod)
 	annotations := pod.GetAnnotations()
+	log.Infof("    Name: %s", pod.Name)
 	log.Infof("    Namespace: %s", pod.Namespace)
 	log.Infof("    ResourceVersion: %s", pod.ObjectMeta.ResourceVersion)
 	log.Infof("    NodeName: %s", pod.Spec.NodeName)
@@ -55,6 +56,10 @@ func (t *TestHandler) ObjectCreated(obj interface{}) {
 	}
 	if value != "injected" {
 		log.Errorf("Pod requesting kubernetes-credhub integration but init container has not been injected...")
+		return
+	}
+	if len(pod.Status.PodIP) == 0 {
+		log.Infof("Pod requesting kubernetes-credhub integration but it has not been scheduled yet...")
 		return
 	}
 
