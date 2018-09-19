@@ -1,9 +1,14 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"time"
 
+	"code.cloudfoundry.org/credhub-cli/credhub/auth"
 	"code.cloudfoundry.org/credhub-cli/credhub/credentials"
 
 	"code.cloudfoundry.org/credhub-cli/credhub"
@@ -12,6 +17,11 @@ import (
 	core_v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+type InitContainerPackage struct {
+	Certificate credentials.Certificate `json:"certificate"`
+	CredhubURL  string                  `json:"credhub_url"`
+}
 
 type Handler interface {
 	Init() error
@@ -47,22 +57,7 @@ func (t *TestHandler) ObjectCreated(obj interface{}) {
 		log.Errorf("Pod requesting kubernetes-credhub integration but init container has not been injected...")
 		return
 	}
-	//Connect to CredHub to Obtain Credentials for The Pod
-	// credhubEndpoint := "https://10.0.3.3:8844"
-	// fmt.Printf("Connecting to: %s....", credhubEndpoint)
-	// credhubClient, err := credhub.New(credhubEndpoint, credhub.SkipTLSValidation(true), credhub.Auth(auth.UaaClientCredentials("ops_manager", "SzDgzZcrXGMVNS8H39hOshRGz-xEXiCA")))
-	// if err != nil {
-	// 	fmt.Printf("Failed!\n")
-	// 	log.Fatal(err)
-	// 	os.Exit(1)
-	// }
-	// fmt.Printf("Success!\n")
-	// cert, err := obtainCert(pod, credhubClient)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// 	os.Exit(1)
-	// }
-	cert := credentials.Certificate{}
+
 	client := getKubernetesClient() //TODO: Pass the k8s client?
 	attempts := 0
 	for attempts < 100 {
@@ -76,28 +71,70 @@ func (t *TestHandler) ObjectCreated(obj interface{}) {
 		for _, initContainerStatus := range podStatus.InitContainerStatuses {
 			if initContainerStatus.Name == "kubernetes-credhub-init" {
 				if initContainerStatus.State.Running != nil {
-					err = sendCert(pod, cert)
+					cert, err := obtainCert(pod)
+					// if err != nil {
+					// 	log.Errorf("Failed! Could not recieve new cert from credhub! %+v", err)
+					// 	return
+					// }
+					err = sendInitPackage(pod, cert)
 					if err != nil {
 						log.Errorf("Failed! Could not send cert over to init container! %+v", err)
 						return
 					}
-					log.Infof("Successfully send credhub cert to init container!")
+					log.Infof("Successfully sent credhub cert to init container!")
 					return
 				}
 			}
 		}
-		attempts += 1
+		attempts++
 		time.Sleep(time.Second * 3)
 	}
 	log.Errorf("Failed! Waited 5 minutes for init container to become ready!")
 	return
 }
-func sendCert(pod *core_v1.Pod, cert credentials.Certificate) error {
-	log.Infof("Send cert to init pod %+v", cert)
-	return nil
+
+func sendInitPackage(pod *core_v1.Pod, cert credentials.Certificate) error {
+	credhubURL := "https://10.0.3.3:8844"
+	log.Infof("Send cert to init container %+v", cert)
+	for _, initContainer := range pod.Spec.InitContainers {
+		if initContainer.Name == "kubernetes-credhub-init" {
+			hostname := pod.Status.PodIP
+			port := initContainer.Ports[0].ContainerPort
+			endpoint := "v1/health"
+			URL := fmt.Sprintf("http://%s:%v/%s", hostname, port, endpoint)
+			payload := InitContainerPackage{
+				Certificate: cert,
+				CredhubURL:  credhubURL,
+			}
+			log.Infof("Sending JSON %+v to %s!", payload, URL)
+			requestByte, err := json.Marshal(payload)
+			if err != nil {
+				log.Errorf("Failed marshalling payload to init container! %s ", err.Error())
+				return err
+			}
+			rs, err := http.Post(URL, "application/json", bytes.NewReader(requestByte))
+			if err != nil {
+				log.Errorf("Failed sending payload to init container! %s ", err.Error())
+				return err
+			}
+			defer rs.Body.Close()
+
+			bodyBytes, err := ioutil.ReadAll(rs.Body)
+			if err != nil {
+				log.Errorf("Failed reading response when sending payload to init container! %s ", err.Error())
+				return err
+			}
+
+			log.Infof(string(bodyBytes))
+			return nil
+		}
+	}
+	err := fmt.Errorf("Never found init container to send payload to! %+v are the containers we found", pod.Spec.InitContainers)
+	log.Error(err.Error())
+	return err
 }
 
-func obtainCert(pod *core_v1.Pod, credhubClient *credhub.CredHub) (credentials.Certificate, error) {
+func obtainCert(pod *core_v1.Pod) (credentials.Certificate, error) {
 
 	//*Always* store our CA with the following path: "/kubernetes-credhub/ca"
 	//*Always* store each new cert with the following path: "/kubernetes-credhub/certs/*"
@@ -106,6 +143,17 @@ func obtainCert(pod *core_v1.Pod, credhubClient *credhub.CredHub) (credentials.C
 	caName := "ca"
 	certPath := rootPath + "certs/"
 	certName := pod.UID
+	credhubEndpoint := "https://10.0.3.3:8844"
+	credhubClientUser := "ops_manager"
+	credhubClientSecret := "SzDgzZcrXGMVNS8H39hOshRGz-xEXiCA"
+
+	log.Infof("Connecting to: %s....", credhubEndpoint)
+	credhubClient, err := credhub.New(credhubEndpoint, credhub.SkipTLSValidation(true), credhub.Auth(auth.UaaClientCredentials(credhubClientUser, credhubClientSecret)))
+	if err != nil {
+		log.Errorf("Failed to create credhub client! %v", err)
+		return credentials.Certificate{}, err
+	}
+	log.Infof("Success!\n")
 
 	// If the certificate already exists, return it, if it doesn't create it
 	log.Infof("Getting certificate with the following path: %s%s......", certPath, certName)

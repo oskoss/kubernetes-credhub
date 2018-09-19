@@ -63,7 +63,7 @@ func mutationRequired(ignoredList []string, metadata *metav1.ObjectMeta) bool {
 
 	for _, namespace := range ignoredList {
 		if metadata.Namespace == namespace {
-			glog.Infof("Skip mutation for %v for it' in special namespace:%v", metadata.Name, metadata.Namespace)
+			glog.Infof("Skip mutation for it' in special namespace:%v", metadata.Namespace)
 			return false
 		}
 	}
@@ -78,17 +78,17 @@ func mutationRequired(ignoredList []string, metadata *metav1.ObjectMeta) bool {
 	var required bool
 	if status == "" {
 		required = false
-		glog.Infof("Annotation is not present. Mutation of %v is not required.", metadata.Name)
+		glog.Infof("Annotation is not present. Mutation is not required.")
 	} else {
 		switch status {
 		default:
-			glog.Infof("Annotation is not yes, y, true, enable, or on. Mutation of %v is not required.", metadata.Name)
+			glog.Infof("Annotation is not yes, y, true, enable, or on. Mutation not required.")
 			required = false
 		case injected:
-			glog.Infof("Mutation already occurred. Mutation of %v is not required.", metadata.Name)
+			glog.Infof("Mutation already occurred. Mutation is not required.")
 			required = false
 		case "y", "yes", "true", "on", "enable":
-			glog.Infof("Annotation is present. Mutation of %v is required.", metadata.Name)
+			glog.Infof("Annotation is present. Mutation is required.")
 			required = true
 		}
 	}
@@ -101,7 +101,7 @@ func addContainer(pod *corev1.Pod) patchOperation {
 	first := len(pod.Spec.InitContainers) == 0
 	var value interface{}
 	container := corev1.Container{
-		Image: "k8s.gcr.io/goproxy:0.1",
+		Image: "oskoss/kubernetes-credhub-init:v0",
 		Ports: []corev1.ContainerPort{corev1.ContainerPort{ContainerPort: 8080}},
 		Name:  "kubernetes-credhub-init",
 	}
