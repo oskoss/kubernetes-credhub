@@ -1,0 +1,38 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: kubernetes-credhub
+  labels:
+    app: kubernetes-credhub
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: kubernetes-credhub
+    spec:
+      serviceAccountName: kubernetes-credhub
+      containers:
+        - name: kubernetes-credhub-webhook
+          image: oskoss/kubernetes-credhub-webhook:v0
+          imagePullPolicy: Always
+          args:
+            - -tlsCertFile=/etc/webhook/certs/cert.pem
+            - -tlsKeyFile=/etc/webhook/certs/key.pem
+            - -alsologtostderr
+            - --logtostderr=1
+            - -v=4
+            - 2>&1
+          volumeMounts:
+            - name: credhub-webhook-cert
+              mountPath: /etc/webhook/certs
+              readOnly: true
+        - name: kubernetes-credhub-controller
+          image: oskoss/kubernetes-credhub-controller:v0
+          imagePullPolicy: Always
+          args:
+            - --logtostderr=1
+      volumes:
+        - name: credhub-webhook-cert
+          secret:
+            secretName: credhub-webhook-cert

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+ name: kubernetes-credhub
+ namespace: kubernetes-credhub
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: kubernetes-credhub-rbac
+subjects:
+  - kind: ServiceAccount
+    name: kubernetes-credhub
+    namespace: kubernetes-credhub
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io

@@ -1,0 +1,13 @@
+# Compile Mutating-Webhook
+FROM golang:1.11 as builder
+
+COPY . $GOPATH/src/mypackage/myapp
+WORKDIR $GOPATH/src/mypackage/myapp
+RUN go get -d -v ./...
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build  -o /go/bin/credhub-webhook .
+
+# Build small Mutating-Webhook Container
+FROM scratch
+
+COPY --from=builder /go/bin/credhub-webhook /go/bin/credhub-webhook
+ENTRYPOINT ["/go/bin/credhub-webhook"]
