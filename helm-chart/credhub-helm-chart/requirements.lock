@@ -1,0 +1,9 @@
+dependencies:
+- name: uaa
+  repository: file://../uaa-helm-chart
+  version: 0.1.0
+- name: postgresql
+  repository: https://kubernetes-charts.storage.googleapis.com/
+  version: 0.8.7
+digest: sha256:3395a81832b701084fb074bd9c68a9129d980607805c42a495885b4bb2516f02
+generated: 2018-09-12T16:40:05.460806407+03:00

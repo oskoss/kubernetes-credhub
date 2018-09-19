@@ -1,0 +1,65 @@
+# Default values for credhub-helm-chart.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+
+# Dependent UAA config, credhub credentials can be configured here
+uaa:
+  credhub:
+    user: credhub
+    password: nunYYKhwUHZb 
+    client_secret: IpemYYnsLLaNB
+
+# Dependent postgresql config
+
+postgresql:
+  enabled: true
+  postgresUser: "credhub"
+  postgresPassword:
+  postgresDatabase: "credhub"
+  postgresConfig:
+    maxConnections: "1500"
+  persistence:
+    enabled: true
+  service:
+    port: 5432
+ 
+## If NOT using the PostgreSQL in this chart (postgresql.enabled=false),
+## you must specify the following database details
+database:
+  db_name:
+  host:
+  port:
+  user:
+  password:
+
+replicaCount: 1
+
+image:
+  #repository: ykisialiou/credhub
+  repository: orangeopensource/credhub
+  tag: latest
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 9000
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #  cpu: 100m
+  #  memory: 128Mi
+  # requests:
+  #  cpu: 100m
+  #  memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+

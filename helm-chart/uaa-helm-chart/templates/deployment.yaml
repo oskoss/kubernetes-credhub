@@ -1,0 +1,64 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ template "uaa.fullname" . }}
+  labels:
+    app: {{ template "uaa.name" . }}
+    chart: {{ template "uaa.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "uaa.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "uaa.name" . }}
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          env:
+            - name: CREDHUB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name:  {{ template "uaa.fullname" . }}
+                  key: credhubPassword
+            - name: CREDHUB_CLIENT_SECRET  
+              valueFrom:                                                                                                       
+                secretKeyRef:                                                                                                  
+                  name:  {{ template "uaa.fullname" . }}                                                                       
+                  key: credhubClientSecret            
+            - name: UAA_CONFIG_YAML
+              value: '{ "scim": { "users": [ "credhub|$(CREDHUB_PASS)|credhub|Credhub|User|credhub.read,credhub.write" ]}, "oauth": { "clients": { "credhub_client": { "secret" : $(CREDHUB_CLIENT_SECRET) }}}}'
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          # This (and the volumes section below) mount the config map as a volume.
+          volumeMounts:
+            - mountPath: /uaa
+              name: uaa-config-volume
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+      volumes:
+        - name: uaa-config-volume
+          configMap:
+            name: {{ template "uaa.fullname" . }}

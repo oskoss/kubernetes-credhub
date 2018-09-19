@@ -1,0 +1,8 @@
+dependencies:
+- name: uaa
+  version: "0.1.0"
+  repository: "file://../uaa-helm-chart"
+- name: postgresql
+  version: 0.8.7
+  repository: https://kubernetes-charts.storage.googleapis.com/
+  condition: postgresql.enabled

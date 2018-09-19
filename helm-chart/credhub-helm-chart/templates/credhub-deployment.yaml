@@ -1,0 +1,75 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ template "credhub.fullname" . }}
+  labels:
+    app: {{ template "credhub.name" . }}
+    chart: {{ template "credhub.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "credhub.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "credhub.name" . }}
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: UAA_URL
+              value: 'http://{{ .Release.Name }}-uaa:{{ index .Values "uaa" "service" "port" }}/uaa'
+            - name: UAA_INTERNAL_URL
+              value: 'http://{{ .Release.Name }}-uaa:{{ index .Values "uaa" "service" "port" }}/uaa'
+            {{- if .Values.postgresql.enabled }}
+            - name: PG_HOST
+              value: {{ .Release.Name }}-postgresql
+            - name: PG_USER
+              value: {{.Values.postgresql.postgresUser | quote }} 
+            - name: PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-postgresql
+                  key: postgres-password
+            - name: PG_DB
+              value: {{.Values.postgresql.postgresDatabase | quote }}
+            {{- else }}
+            {{- if .Values.database.host }}
+            - name: PG_HOST                                                                                                    
+              value: {{ .Values.database.host | quote }}
+            - name: PG_USER
+              value: {{ .Values.database.user | quote }}
+            - name: PG_PASSWORD
+              value:
+                secretKeyRef:
+                  name: {{ template "credhub.fullname" . }}
+                  key: db-password                
+            - name: PG_DB
+              value: {{ .Values.database.db_name }}
+            {{- end }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 9000
+              protocol: TCP
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}

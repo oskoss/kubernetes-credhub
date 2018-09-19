@@ -1,0 +1,4 @@
+credhub URL
+
+https://{{ .Release.Name }}-credhub:9000
+
