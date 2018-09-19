@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"code.cloudfoundry.org/credhub-cli/credhub/credentials"
 	"github.com/gin-gonic/gin"
@@ -59,8 +60,9 @@ func receiveCreds(c *gin.Context) {
 		return
 	}
 	log.Printf("%+v was uploaded!\n", json)
-	return
-
+	c.String(200, "Success")
+	time.Sleep(time.Millisecond * 500)
+	os.Exit(0)
 }
 
 // Gets certs, as files, connects to credhub, gets all accessable creds and store in file

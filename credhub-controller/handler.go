@@ -60,7 +60,7 @@ func (t *TestHandler) ObjectCreated(obj interface{}) {
 
 	client := getKubernetesClient() //TODO: Pass the k8s client?
 	attempts := 0
-	for attempts < 100 {
+	for attempts < 60 {
 		log.Infof("Attempt %v to get the status of kubernetes-credhub init container....", attempts)
 		latestPod, err := client.CoreV1().Pods(pod.Namespace).Get(pod.Name, metav1.GetOptions{})
 		if err != nil {
@@ -82,15 +82,27 @@ func (t *TestHandler) ObjectCreated(obj interface{}) {
 						return
 					}
 					log.Infof("Successfully sent credhub cert to init container!")
+					markPodFinished(pod)
 					return
 				}
 			}
 		}
 		attempts++
-		time.Sleep(time.Second * 3)
+		time.Sleep(time.Second)
 	}
-	log.Errorf("Failed! Waited 5 minutes for init container to become ready!")
+	log.Errorf("Failed! Waited 1 minutes for init container to become ready!")
 	return
+}
+
+func markPodFinished(pod *core_v1.Pod) error {
+	currentPodAnnotations := pod.GetAnnotations()
+	for _, currentPodAnnotation := range currentPodAnnotations {
+		log.Info(currentPodAnnotation)
+		if currentPodAnnotation == "credhub.pivotal.io" {
+			log.Infof("FOUND THE ANNOTATIONSDJKSJDLKSJKDJSLDJKLSJDKLJSLKJD!J#!@!@!@!!!")
+		}
+	}
+	return nil
 }
 
 func sendInitPackage(pod *core_v1.Pod, cert credentials.Certificate) error {
