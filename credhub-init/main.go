@@ -9,8 +9,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"github.com/oskoss/credhub-controller"
 
+	"code.cloudfoundry.org/credhub-cli/credhub/credentials"
 	"github.com/gin-gonic/gin"
 )
 
@@ -23,6 +23,11 @@ const (
 	credhubInfoFileName = "credhub.json"
 	volumePath          = "/tmp"
 )
+
+type InitContainerPackage struct {
+	Certificate credentials.Certificate `json:"certificate"`
+	CredhubURL  string                  `json:"credhub_url"`
+}
 
 type CredhubResponse struct {
 	Credentials []struct {
@@ -48,12 +53,12 @@ func main() {
 }
 
 func receiveCreds(c *gin.Context) {
-	var json credhub-controller.InitContainerPackage
+	var json InitContainerPackage
 	if err := c.ShouldBindJSON(&json); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	log.Infof("%+v was uploaded!\n", json)
+	log.Printf("%+v was uploaded!\n", json)
 	return
 
 }
