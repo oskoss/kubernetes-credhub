@@ -60,7 +60,11 @@ func receiveCreds(c *gin.Context) {
 		return
 	}
 	log.Printf("%+v was uploaded!\n", json)
-	c.String(200, "Success")
+	c.JSON(200, "Success!")
+	shutdown()
+}
+
+func shutdown() {
 	time.Sleep(time.Millisecond * 500)
 	os.Exit(0)
 }
