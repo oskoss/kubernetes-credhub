@@ -100,7 +100,7 @@ func sendInitPackage(pod *core_v1.Pod, cert credentials.Certificate) error {
 		if initContainer.Name == "kubernetes-credhub-init" {
 			hostname := pod.Status.PodIP
 			port := initContainer.Ports[0].ContainerPort
-			endpoint := "v1/health"
+			endpoint := "v1/receivecreds"
 			URL := fmt.Sprintf("http://%s:%v/%s", hostname, port, endpoint)
 			payload := InitContainerPackage{
 				Certificate: cert,

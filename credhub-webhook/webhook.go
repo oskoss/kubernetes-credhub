@@ -101,9 +101,10 @@ func addContainer(pod *corev1.Pod) patchOperation {
 	first := len(pod.Spec.InitContainers) == 0
 	var value interface{}
 	container := corev1.Container{
-		Image: "oskoss/kubernetes-credhub-init:v0",
-		Ports: []corev1.ContainerPort{corev1.ContainerPort{ContainerPort: 8080}},
-		Name:  "kubernetes-credhub-init",
+		Image:           "oskoss/kubernetes-credhub-init:v0",
+		Ports:           []corev1.ContainerPort{corev1.ContainerPort{ContainerPort: 8080}},
+		Name:            "kubernetes-credhub-init",
+		ImagePullPolicy: "Always",
 	}
 	value = container
 	path := "/spec/initContainers"
