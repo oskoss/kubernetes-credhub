@@ -17,6 +17,8 @@ import (
 	"k8s.io/client-go/util/workqueue"
 )
 
+//go:generate fileb0x b0x.yaml
+
 // retrieve the Kubernetes cluster client
 func getKubernetesClient() kubernetes.Interface {
 
@@ -38,6 +40,7 @@ func getKubernetesClient() kubernetes.Interface {
 }
 
 func main() {
+
 	// get the Kubernetes client for connectivity
 	client := getKubernetesClient()
 
@@ -111,7 +114,7 @@ func main() {
 		clientset: client,
 		informer:  informer,
 		queue:     queue,
-		handler:   &TestHandler{},
+		handler:   &CredhubHandler{},
 	}
 
 	// use a channel to synchronize the finalization for a graceful shutdown

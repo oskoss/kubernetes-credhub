@@ -1,0 +1,13 @@
+pkg: config
+
+# destination
+dest: "./config"
+
+# build tags for the main b0x.go file
+tags: ""
+
+# type: array of objects
+custom:
+  # type: array of strings
+  - files: 
+    - "controller_config.yaml"

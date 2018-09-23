@@ -3,8 +3,9 @@ FROM golang:1.11 as builder
 
 COPY . $GOPATH/src/mypackage/myapp
 WORKDIR $GOPATH/src/mypackage/myapp
-RUN go get -d -v ./...
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build  -o /go/bin/credhub-controller . 
+RUN go get -u github.com/UnnoTed/fileb0x && \
+go generate && go get -d -v ./... && \
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build  -o /go/bin/credhub-controller . 
 
 # Build small Controller Container
 FROM scratch
