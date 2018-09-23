@@ -15,6 +15,9 @@ import (
 func main() {
 
 	router := gin.Default()
+	router.LoadHTMLFiles("templates/index.html")
+	router.Static("/v1/assets", "./assets")
+
 	v1 := router.Group("/v1")
 	{
 		v1.GET("/creds", getCreds)
@@ -53,6 +56,14 @@ func getCreds(c *gin.Context) {
 
 	credsFile := os.Getenv("CREDS_FILE_PATH")
 
+	if len(credsFile) == 0 {
+
+		c.JSON(503, gin.H{
+			"status": "CREDS_FILE_PATH variable is not set up. Please do...",
+		})
+		return
+	}
+
 	dat, err := ioutil.ReadFile(credsFile)
 	if err != nil {
 
@@ -60,8 +71,11 @@ func getCreds(c *gin.Context) {
 			"status": "Creds file can't be read",
 		})
 	}
+	strDat := string(dat)
 
-	c.String(http.StatusOK, string(dat))
+	c.HTML(http.StatusOK, "index.html", gin.H{
+		"content": strDat,
+	})
 
 }
 
