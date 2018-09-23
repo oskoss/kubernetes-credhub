@@ -159,8 +159,9 @@ func setupCredhubClient(creds credentials.Certificate) (*http.Client, error) {
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				RootCAs:      caCertPool,
-				Certificates: []tls.Certificate{cert},
+				InsecureSkipVerify: true,
+				RootCAs:            caCertPool,
+				Certificates:       []tls.Certificate{cert},
 			},
 		},
 	}
@@ -183,7 +184,7 @@ func healthEndpoint(c *gin.Context) {
 // Sent get request to credhub API and return response body.
 func credhubGet(request string, credhubURL string, client *http.Client) ([]byte, error) {
 
-	resp, err := client.Get("https://" + credhubURL + request)
+	resp, err := client.Get(credhubURL + request)
 	if err != nil {
 		log.Printf("Credhub API connection err: %s\n", err.Error())
 		return []byte{}, err
