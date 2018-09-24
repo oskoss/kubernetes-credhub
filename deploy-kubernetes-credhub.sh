@@ -6,7 +6,7 @@ This involves:
  - Building 2 containers (with your credhub credentials compiled in)
  - Pushing the containers to a container registry
  - Getting the K8s extension-apiserver CA
- - Create and deploy the following K8s constructs:
+ - Creating and deploying the following K8s constructs:
    - kubernetes-credhub namespace
    - kubernetes-credhub webhook
    - kubernetes-credhub CSR
@@ -23,11 +23,12 @@ openssl is required
 Ensure kubectl is logged in with a user that has permission to deploy
 deployments, MutatingWebhookConfigurations, and services.
 
-Ensure docker is logged in and you can push to dockerhub under the 
-provided tag.
-"
+Ensure docker is logged in and you can push to a docker repository under the 
+tag you will provide."
 
-read -p "Press <ENTER> when all the above are met and you are ready to go!"
+read -p "Press <ENTER> when all the above are met and you are ready to go"
+
+
 
 if [ ! -x "$(command -v openssl)" ]; then
     echo "openssl not found"
@@ -47,9 +48,10 @@ fi
 which docker
 if [ $? -eq 0 ]
 then
-    docker --version | grep "Docker Version"
+    docker --version | grep -i "docker version"
     if [ $? -eq 0 ]
     then
+        echo "docker found"
     else
         echo "docker not found"
         exit 1
@@ -60,6 +62,37 @@ else
 fi
 
 
+read -p "Enter FULL Path to PEM Encoded Credhub Trusted CA: " capath
+read -p "Enter FULL Path to PEM Encoded Credhub RSA Key: " keypath
+read -p "Enter FULL URL to Credhub instance (ensure k8s pods have access to this): " credhuburl
+read -p "Enter Credhub Admin Client: " credhubclient
+read -p "Enter Credhub Admin Client Secret: " credhubsecret
+read -p "While it is not recommended, should we skip tls-validation on your Credhub instance? (y/n)" skiptls
+read -p "Enter Docker Repository to store the credhub containers in: " docker
+
+case "$skiptls" in
+    [yY]) 
+        skiptlsbool=true
+        ;;
+    *)
+        skiptlsbool=false
+        ;;
+esac
+
+
+
+echo "Using $capath for the Credhub Trusted CA"
+echo "Using $keypath for the Credhub Trusted RSA Key"
+echo "Using $credhuburl for the URL to Credhub instance"
+echo "Using $credhubclient for the Credhub Admin Client"
+echo "Using $credhubsecret for the Credhub Admin Client Secret"
+echo "SkipTLSValidation for your Credhub instance is: $skiptlsbool"
+echo "Using $docker as your docker repository"
+
+read -p "Verify the correct values are correct and hit <ENTER> when ready"
+
+echo "SORRYY!!!! Still work in Progress...."
+exit 1
 
 docker build --no-cache -t oskoss/kubernetes-credhub-init:v0 . && docker push oskoss/kubernetes-credhub-init:v0
 
