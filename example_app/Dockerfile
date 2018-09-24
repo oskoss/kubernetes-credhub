@@ -12,4 +12,5 @@ FROM alpine
 COPY --from=builder /go/bin/example-app /go/bin/example-app
 COPY --from=builder /go/src/mypackage/myapp/ /go/bin/
 EXPOSE 8080
+WORKDIR /go/bin
 ENTRYPOINT ["/go/bin/example-app"]

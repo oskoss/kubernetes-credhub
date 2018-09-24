@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
       - name:  example-app
-        image: oskoss/kubernetes-credhub-example-app:v0
+        image: ykisialiou/credhub-example
         imagePullPolicy: Always
 ---
 apiVersion: v1
