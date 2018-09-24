@@ -19,17 +19,17 @@ import (
 
 	"code.cloudfoundry.org/credhub-cli/credhub"
 	log "github.com/Sirupsen/logrus"
-	"github.com/ghodss/yaml"
 	"github.com/oskoss/kubernetes-credhub/credhub-controller/config"
+	"gopkg.in/yaml.v2"
 	core_v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type AppConfig struct {
 	CredhubEndpoint struct {
-		url               string `yaml:"url"`
-		SkipTLSValidation bool   `yaml:"skip_tls_validation`
-	} `yaml:"credhub_endpoint`
+		URL               string `yaml:"url"`
+		SkipTLSValidation bool   `yaml:"skip_tls_validation"`
+	} `yaml:"credhub_endpoint"`
 	CredhubClient struct {
 		Name   string `yaml:"name"`
 		Secret string `yaml:"secret"`
@@ -138,7 +138,7 @@ func enableCertToReadCreds(namespaceUID string, credentialPath string) error {
 	}
 
 	credhubClient, err := credhub.New(
-		curConfig.CredhubEndpoint.url,
+		curConfig.CredhubEndpoint.URL,
 		credhub.SkipTLSValidation(skipTLSValidation),
 		credhub.Auth(auth.UaaClientCredentials(curConfig.CredhubClient.Name, curConfig.CredhubClient.Secret)),
 	)
@@ -187,7 +187,7 @@ func sendInitPackage(pod *core_v1.Pod, cert credentials.Certificate) error {
 			URL := fmt.Sprintf("http://%s:%v/%s", hostname, port, endpoint)
 			payload := InitContainerPackage{
 				Certificate: cert,
-				CredhubURL:  getConfig().CredhubEndpoint.url,
+				CredhubURL:  getConfig().CredhubEndpoint.URL,
 			}
 			log.Infof("Sending JSON %+v to %s!", payload, URL)
 			requestByte, err := json.Marshal(payload)
@@ -311,14 +311,15 @@ func generateCert(namespaceUID string, pemKeyString string, pemCACertificateStri
 }
 
 func getConfig() AppConfig {
+
 	topSecretFile, err := config.ReadFile("controller_config.yaml")
 	if err != nil {
 		log.Fatal(err)
 	}
 	curConfig := AppConfig{}
+	err = yaml.Unmarshal(topSecretFile, &curConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = yaml.Unmarshal([]byte(topSecretFile), &curConfig)
 	return curConfig
 }

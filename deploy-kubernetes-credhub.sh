@@ -1,14 +1,29 @@
 #!/bin/bash
 
-echo "Deploying kubernetes-credhub webhook, and controller.
+echo "We will deploy the kubernetes-credhub webhook, and controller to K8s.
+
+This involves:
+ - Building 2 containers (with your credhub credentials compiled in)
+ - Pushing the containers to a container registry
+ - Deploying Kubernetes MutatingWebhookConfigurations, Deployments, and Services
 
 kubectl is required
+docker is required
 base64 is required
+
 Ensure kubectl is logged in with a user that has permission to deploy
 deployments, MutatingWebhookConfigurations, and services.
 
+Ensure docker is logged in and you can push to dockerhub under the 
+provided tag.
+
+Hit ANY KEY when all the above are met and you are ready to go!
 
 "
+while get
+
+
+
 namespace=kubernetes-credhub
 
 if [ ! -x "$(command -v base64)" ]; then

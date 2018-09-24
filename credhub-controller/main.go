@@ -40,7 +40,6 @@ func getKubernetesClient() kubernetes.Interface {
 }
 
 func main() {
-
 	// get the Kubernetes client for connectivity
 	client := getKubernetesClient()
 
