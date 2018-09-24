@@ -10,5 +10,6 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build  -o /go/bin/example-app .
 FROM alpine
 
 COPY --from=builder /go/bin/example-app /go/bin/example-app
-EXPOSE 8084
+COPY --from=builder /go/src/mypackage/myapp/ /go/bin/
+EXPOSE 8080
 ENTRYPOINT ["/go/bin/example-app"]

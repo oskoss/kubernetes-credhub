@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -25,7 +26,7 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Addr:    ":8084",
+		Addr:    ":8080",
 		Handler: router,
 	}
 
@@ -54,9 +55,9 @@ func main() {
 
 func getCreds(c *gin.Context) {
 
-	credsFile := os.Getenv("CREDS_FILE_PATH")
+	credsDir := "/credhub"
 
-	if len(credsFile) == 0 {
+	if len(credsDir) == 0 {
 
 		c.JSON(503, gin.H{
 			"status": "CREDS_FILE_PATH variable is not set up. Please do...",
@@ -64,14 +65,23 @@ func getCreds(c *gin.Context) {
 		return
 	}
 
-	dat, err := ioutil.ReadFile(credsFile)
+	files, err := ioutil.ReadDir(credsDir)
 	if err != nil {
-
 		c.JSON(503, gin.H{
-			"status": "Creds file can't be read",
+			"status": "Creds directory can't be read",
 		})
 	}
-	strDat := string(dat)
+	strDat := ""
+	for _, f := range files {
+		dat, err := ioutil.ReadFile(credsDir + "/" + f.Name())
+		if err != nil {
+
+			c.JSON(503, gin.H{
+				"status": "Creds file can't be read",
+			})
+		}
+		strDat = fmt.Sprintf("%s\n%s", strDat, string(dat))
+	}
 
 	c.HTML(http.StatusOK, "index.html", gin.H{
 		"content": strDat,
