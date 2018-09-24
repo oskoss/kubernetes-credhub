@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -25,12 +26,14 @@ const (
 	clientCertFileName  = "client.pem"
 	caCertFileName      = "server_ca_cert.pem"
 	credhubInfoFileName = "credhub.json"
-	volumePath          = "/tmp"
+	//TODO Get VolumeMountPath from the controller via the InitContainerPackage
+	volumeMountPath = "/credhub"
 )
 
 type InitContainerPackage struct {
 	Certificate credentials.Certificate `json:"certificate"`
 	CredhubURL  string                  `json:"credhub_url"`
+	Namespace   string                  `json:"namespace"`
 }
 
 type CredhubResponse struct {
@@ -49,7 +52,6 @@ func main() {
 	router := gin.Default()
 	v1 := router.Group("/v1")
 	{
-		// v1.POST("/receiveKeys", receiveKeys)
 		v1.POST("/receivecreds", receiveCreds)
 		v1.GET("/health", healthEndpoint)
 	}
@@ -60,7 +62,6 @@ func main() {
 	}
 
 	go func() {
-		// service connections
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen: %s\n", err)
 		}
@@ -109,7 +110,7 @@ func getPodCreds(initJSON InitContainerPackage) ([]credentials.Credential, error
 		return []credentials.Credential{}, err
 	}
 
-	request := "/api/v1/data?name-like=/"
+	request := "/api/v1/data?name-like=/kubernetes-credhub/credentials/" + initJSON.Namespace
 	bodyBytes, err := credhubGet(request, initJSON.CredhubURL, client)
 	if err != nil {
 		log.Printf("Issue getting creds from credhub! Error: %v\n", err)
@@ -123,29 +124,26 @@ func getPodCreds(initJSON InitContainerPackage) ([]credentials.Credential, error
 		return []credentials.Credential{}, err
 	}
 
-	log.Printf("GOT CREDS FROM CREDHUB!!!!!!!!!!!! %+v", cred)
+	for _, credential := range cred.Credentials {
+
+		request = "/api/v1/data?name=" + credential.Name
+		bodyBytes, err := credhubGet(request, initJSON.CredhubURL, client)
+		if err != nil {
+			if strings.Contains(err.Error(), "credential does not exist or you do not have sufficient authorization") {
+				log.Printf("Access to %s was denied!", credential.Name)
+			} else {
+				log.Printf("Error getting credential: %s! %v", credential.Name, err)
+				return []credentials.Credential{}, err
+			}
+		} else {
+			storeCreds(credential.Name, string(bodyBytes))
+		}
+
+	}
 	return []credentials.Credential{}, nil
-	// for _, credential := range cred.Credentials {
-
-	// 	// Get creds by name
-	// 	request = "/api/v1/data?name=" + credential.Name
-	// 	bodyBytes, err := credhubGet(request, initJSON.CredhubURL, client)
-	// 	if err != nil {
-	// 		log.Printf("Issue getting creds json un-marshalling error: %v\n", err)
-	// 		return []credentials.Credential{}, err
-	// 	}
-
-	// 	storeCreds(credential.Name, string(bodyBytes))
-	// 	c.String(http.StatusOK, fmt.Sprintf("Cred %s stored at %s\n", credential.Name, volumePath))
-
-	// 	fmt.Printf("name: %v, value: %v \n", credential.Name, string(bodyBytes))
-	// }
-
 }
 
 func setupCredhubClient(creds credentials.Certificate) (*http.Client, error) {
-	log.Printf("YUP SECERTKSJDKLSLK: %+v", creds.Value)
-	// Connect to credhub, using received certs
 	caCertPool := x509.NewCertPool()
 	caCertPool.AppendCertsFromPEM([]byte(creds.Value.Ca))
 	log.Printf("CA cert pool created\n")
@@ -169,7 +167,6 @@ func setupCredhubClient(creds credentials.Certificate) (*http.Client, error) {
 	return client, nil
 }
 
-// Health will return alive message with HTTP 200 code
 func healthEndpoint(c *gin.Context) {
 
 	c.JSON(200, gin.H{
@@ -178,10 +175,6 @@ func healthEndpoint(c *gin.Context) {
 
 }
 
-// Utility functions
-// func upload_files
-
-// Sent get request to credhub API and return response body.
 func credhubGet(request string, credhubURL string, client *http.Client) ([]byte, error) {
 
 	resp, err := client.Get(credhubURL + request)
@@ -204,16 +197,26 @@ func credhubGet(request string, credhubURL string, client *http.Client) ([]byte,
 		err := fmt.Errorf("Credhub can't process request. Response is %v", bodyString)
 		return []byte{}, err
 	}
-	log.Printf("Credentials found in credhub: %s \n", bodyString)
 
 	return bodyBytes, nil
 }
 
-// TODO: consider multivalue creds processing
-func storeCreds(credName string, credValue string) {
+func storeCreds(fullCredName string, credValue string) error {
 
-	err := ioutil.WriteFile(volumePath+"/"+credName, []byte(credValue), 0644)
+	pathSeg := strings.Split(fullCredName, "/")
+	credName := pathSeg[len(pathSeg)-1]
+
+	file, err := os.Create(volumeMountPath + "/" + credName)
 	if err != nil {
-		return
+		log.Printf("Creating file to write credential to volume error: %s\n", err.Error())
+		return err
 	}
+	defer file.Close()
+
+	_, err = fmt.Fprintf(file, credValue)
+	if err != nil {
+		log.Printf("Writing credential to volume error: %s\n", err.Error())
+		return err
+	}
+	return nil
 }

@@ -28,6 +28,8 @@ var ignoredNamespaces = []string{}
 const (
 	admissionWebhookAnnotationStatusKey = "credhub.pivotal.io"
 	injected                            = "injected"
+	volumeName                          = "credhub-volume"
+	volumeMountPath                     = "/credhub"
 )
 
 type WebhookServer struct {
@@ -101,10 +103,20 @@ func addContainer(pod *corev1.Pod) patchOperation {
 	first := len(pod.Spec.InitContainers) == 0
 	var value interface{}
 	container := corev1.Container{
-		Image:           "oskoss/kubernetes-credhub-init:v0",
-		Ports:           []corev1.ContainerPort{corev1.ContainerPort{ContainerPort: 8080}},
+		Image: "oskoss/kubernetes-credhub-init:v0",
+		Ports: []corev1.ContainerPort{
+			corev1.ContainerPort{
+				ContainerPort: 8080,
+			},
+		},
 		Name:            "kubernetes-credhub-init",
 		ImagePullPolicy: "Always",
+		VolumeMounts: []corev1.VolumeMount{
+			corev1.VolumeMount{
+				Name:      volumeName,
+				MountPath: volumeMountPath,
+			},
+		},
 	}
 	value = container
 	path := "/spec/initContainers"
@@ -126,7 +138,7 @@ func addVolume(pod *corev1.Pod) patchOperation {
 	first := len(pod.Spec.Volumes) == 0
 	var value interface{}
 	volume := corev1.Volume{
-		Name: "credhub-volume",
+		Name: volumeName,
 		VolumeSource: corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
@@ -146,6 +158,31 @@ func addVolume(pod *corev1.Pod) patchOperation {
 	return patch
 }
 
+func addVolumeMount(pod *corev1.Pod) patchOperation {
+	first := len(pod.Spec.Containers[0].VolumeMounts) == 0
+
+	//TODO Currently we only attach secrets to the first container...probably should do this for all containers.
+	var value interface{}
+	mount := corev1.VolumeMount{
+		Name:      volumeName,
+		MountPath: volumeMountPath,
+	}
+	value = mount
+	path := "/spec/containers/0/volumeMounts"
+	if first {
+		value = []corev1.VolumeMount{mount}
+	} else {
+		path = path + "/-"
+	}
+
+	patch := patchOperation{
+		Op:    "add",
+		Path:  path,
+		Value: value,
+	}
+	return patch
+}
+
 func updateAnnotation() patchOperation {
 	patch := patchOperation{
 		Op:    "replace",
@@ -155,14 +192,16 @@ func updateAnnotation() patchOperation {
 	return patch
 }
 
-// create mutation patch for resoures
+// create mutation patch for resources
 func createPatch(pod *corev1.Pod, annotations map[string]string) ([]byte, error) {
 
 	var patch []patchOperation
 	volumePatch := addVolume(pod)
+	mountPatch := addVolumeMount(pod)
 	initContainersPatch := addContainer(pod)
 	annotationPatch := updateAnnotation()
 	patch = append(patch, volumePatch)
+	patch = append(patch, mountPatch)
 	patch = append(patch, initContainersPatch)
 	patch = append(patch, annotationPatch)
 	return json.Marshal(patch)

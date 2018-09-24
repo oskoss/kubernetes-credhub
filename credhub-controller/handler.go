@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"math/big"
 	"net/http"
+	"strings"
 	"time"
 
 	"code.cloudfoundry.org/credhub-cli/credhub/auth"
@@ -43,6 +44,7 @@ type AppConfig struct {
 type InitContainerPackage struct {
 	Certificate credentials.Certificate `json:"certificate"`
 	CredhubURL  string                  `json:"credhub_url"`
+	Namespace   string                  `json:"namespace"`
 }
 
 type Handler interface {
@@ -87,7 +89,7 @@ func (t *CredhubHandler) ObjectCreated(obj interface{}) {
 
 	client := getKubernetesClient()
 	attempts := 0
-	for attempts < 60 {
+	for attempts < 30 {
 		log.Infof("Attempt %v to get the status of kubernetes-credhub init container....", attempts)
 		latestPod, err := client.CoreV1().Pods(pod.Namespace).Get(pod.Name, metav1.GetOptions{})
 		if err != nil {
@@ -116,7 +118,7 @@ func (t *CredhubHandler) ObjectCreated(obj interface{}) {
 		attempts++
 		time.Sleep(time.Second)
 	}
-	log.Errorf("Failed! Waited 1 minutes for init container to become ready!")
+	log.Errorf("Failed! Waited 30 sec for init container to become ready!")
 	return
 }
 
@@ -154,11 +156,15 @@ func enableCertToReadCreds(namespaceUID string, credentialPath string) error {
 
 	for _, credential := range credentials.Credentials {
 		path := credential.Name
-		actor := fmt.Sprintf("app:%s", namespaceUID)
+		actor := fmt.Sprintf("mtls-app:%s", namespaceUID)
 		permission, err := credhubClient.AddPermission(path, actor, []string{"read", "read_acl"})
 		if err != nil {
-			log.Errorf("could not add %+v permission to credhub usercert %v", permission, namespaceUID)
-			return err
+			if strings.Contains(err.Error(), "permission entry for this actor and path already exists") {
+				log.Infof("Permission for %s credential is already in place", credentialPath)
+			} else {
+				log.Errorf("could not add %+v permission to credhub usercert %v", permission, namespaceUID)
+				return err
+			}
 		}
 	}
 	log.Infof("Added Permission to all %s credentials", credentialPath)
@@ -188,6 +194,7 @@ func sendInitPackage(pod *core_v1.Pod, cert credentials.Certificate) error {
 			payload := InitContainerPackage{
 				Certificate: cert,
 				CredhubURL:  getConfig().CredhubEndpoint.URL,
+				Namespace:   pod.Namespace,
 			}
 			log.Infof("Sending JSON %+v to %s!", payload, URL)
 			requestByte, err := json.Marshal(payload)

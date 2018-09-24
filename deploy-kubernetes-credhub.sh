@@ -61,6 +61,9 @@ fi
 
 
 
+docker build --no-cache -t oskoss/kubernetes-credhub-init:v0 . && docker push oskoss/kubernetes-credhub-init:v0
+
+
 ca_bundle=$(kubectl get configmap -n kube-system extension-apiserver-authentication -o=jsonpath='{.data.client-ca-file}' | base64 | tr -d '\n')
 
 
